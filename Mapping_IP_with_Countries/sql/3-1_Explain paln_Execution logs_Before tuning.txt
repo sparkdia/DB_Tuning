@@ -1,0 +1,263 @@
+hive> SET hive.auto.convert.join=false;
+hive> SET hivevar:ACC_ID = '140137_3';
+hive> SET hivevar:ACC_START_DT = '20200805';
+hive> EXPLAIN INSERT INTO TEST_DW.ACC_IP_CNTRY_MAPP PARTITION (ACC_ID, ACC_START_DT)
+    > SELECT H.IP_ADDR
+    >      , G.CNTRY_CD
+    >      , G.CNTRY_NM
+    >      , H.ACC_ID
+    >      , H.ACC_START_DT
+    >   FROM (
+    >         SELECT IP_ADDR
+    >              , COALESCE(SPLIT(IP_ADDR,'\\.')[0], '_')   AS IP_OCTET1
+    >              , CAST( SPLIT(IP_ADDR,'\\.')[0] AS BIGINT) * 16777216 +
+    >                CAST( SPLIT(IP_ADDR,'\\.')[1] AS BIGINT) * 65536 +
+    >                CAST( SPLIT(IP_ADDR,'\\.')[2] AS BIGINT) * 256 +
+    >                CAST( SPLIT(IP_ADDR,'\\.')[3] AS BIGINT) AS IP_ADDR_NUMT
+    >              , MAX(ACC_ID)         AS ACC_ID
+    >              , MAX(ACC_START_DT)   AS ACC_START_DT
+    >           FROM TEST_ODS.ACC_LOG
+    >          WHERE ACC_ID       = ${ACC_ID}
+    >            AND ACC_START_DT = ${ACC_START_DT}
+    >          GROUP BY IP_ADDR
+    >      ) H
+    >  INNER JOIN
+    >        (
+    >         SELECT IP_OCTET1
+    >              , START_IP_NUMT
+    >              , END_IP_NUMT
+    >              , CNTRY_CD
+    >              , CNTRY_NM
+    >           FROM TEST_DW.CNTRY_IP_RANGE
+    >      ) G
+    >     ON H.IP_OCTET1 = G.IP_OCTET1
+    >  WHERE H.IP_ADDR_NUMT BETWEEN G.START_IP_NUMT AND G.END_IP_NUMT
+    > ;
+OK
+STAGE DEPENDENCIES:
+  Stage-1 is a root stage
+  Stage-2 depends on stages: Stage-1
+  Stage-0 depends on stages: Stage-2
+  Stage-3 depends on stages: Stage-0
+
+STAGE PLANS:
+  Stage: Stage-1
+    Map Reduce
+      Map Operator Tree:
+          TableScan
+            alias: acc_log
+            Statistics: Num rows: 10469250 Data size: 2397458250 Basic stats: COMPLETE Column stats: NONE
+            Filter Operator
+              predicate: ((acc_id = '140137_3') and COALESCE(split(ip_addr, '\.')[0],'_') is not null) (type: boolean)
+              Statistics: Num rows: 5234625 Data size: 1198729125 Basic stats: COMPLETE Column stats: NONE
+              Select Operator
+                expressions: ip_addr (type: string)
+                outputColumnNames: _col0
+                Statistics: Num rows: 5234625 Data size: 1198729125 Basic stats: COMPLETE Column stats: NONE
+                Group By Operator
+                  aggregations: max('140137_3'), max('20200805')
+                  keys: _col0 (type: string)
+                  mode: hash
+                  outputColumnNames: _col0, _col1, _col2
+                  Statistics: Num rows: 5234625 Data size: 1198729125 Basic stats: COMPLETE Column stats: NONE
+                  Reduce Output Operator
+                    key expressions: _col0 (type: string)
+                    sort order: +
+                    Map-reduce partition columns: _col0 (type: string)
+                    Statistics: Num rows: 5234625 Data size: 1198729125 Basic stats: COMPLETE Column stats: NONE
+                    value expressions: _col1 (type: string), _col2 (type: string)
+      Reduce Operator Tree:
+        Group By Operator
+          aggregations: max(VALUE._col0), max(VALUE._col1)
+          keys: KEY._col0 (type: string)
+          mode: mergepartial
+          outputColumnNames: _col0, _col1, _col2
+          Statistics: Num rows: 2617312 Data size: 599364448 Basic stats: COMPLETE Column stats: NONE
+          Select Operator
+            expressions: _col0 (type: string), COALESCE(split(_col0, '\.')[0],'_') (type: string), ((((UDFToLong(split(_col0, '\.')[0]) * 16777216) + (UDFToLong(split(_col0, '\.')[1]) * 65536)) + (UDFToLong(split(_col0, '\.')[2]) * 256)) + UDFToLong(split(_col0, '\.')[3])) (type: bigint), _col1 (type: string), _col2 (type: string)
+            outputColumnNames: _col0, _col1, _col2, _col3, _col4
+            Statistics: Num rows: 2617312 Data size: 599364448 Basic stats: COMPLETE Column stats: NONE
+            File Output Operator
+              compressed: false
+              table:
+                  input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                  output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                  serde: org.apache.hadoop.hive.serde2.lazybinary.LazyBinarySerDe
+
+  Stage: Stage-2
+    Map Reduce
+      Map Operator Tree:
+          TableScan
+            Reduce Output Operator
+              key expressions: _col1 (type: string)
+              sort order: +
+              Map-reduce partition columns: _col1 (type: string)
+              Statistics: Num rows: 2617312 Data size: 599364448 Basic stats: COMPLETE Column stats: NONE
+              value expressions: _col0 (type: string), _col2 (type: bigint), _col3 (type: string), _col4 (type: string)
+          TableScan
+            alias: cntry_ip_range
+            Statistics: Num rows: 190350 Data size: 106657294 Basic stats: COMPLETE Column stats: NONE
+            Select Operator
+              expressions: ip_octet1 (type: string), start_ip_numt (type: string), end_ip_numt (type: string), cntry_cd (type: string), cntry_nm (type: string)
+              outputColumnNames: _col0, _col1, _col2, _col3, _col4
+              Statistics: Num rows: 190350 Data size: 106657294 Basic stats: COMPLETE Column stats: NONE
+              Reduce Output Operator
+                key expressions: _col0 (type: string)
+                sort order: +
+                Map-reduce partition columns: _col0 (type: string)
+                Statistics: Num rows: 190350 Data size: 106657294 Basic stats: COMPLETE Column stats: NONE
+                value expressions: _col1 (type: string), _col2 (type: string), _col3 (type: string), _col4 (type: string)
+      Reduce Operator Tree:
+        Join Operator
+          condition map:
+               Inner Join 0 to 1
+          keys:
+            0 _col1 (type: string)
+            1 _col0 (type: string)
+          outputColumnNames: _col0, _col2, _col3, _col4, _col6, _col7, _col8, _col9
+          Statistics: Num rows: 2879043 Data size: 659300907 Basic stats: COMPLETE Column stats: NONE
+          Filter Operator
+            predicate: _col2 BETWEEN _col6 AND _col7 (type: boolean)
+            Statistics: Num rows: 319893 Data size: 73255503 Basic stats: COMPLETE Column stats: NONE
+            Select Operator
+              expressions: _col0 (type: string), _col8 (type: string), _col9 (type: string), _col3 (type: string), _col4 (type: string)
+              outputColumnNames: _col0, _col1, _col2, _col3, _col4
+              Statistics: Num rows: 319893 Data size: 73255503 Basic stats: COMPLETE Column stats: NONE
+              File Output Operator
+                compressed: false
+                Statistics: Num rows: 319893 Data size: 73255503 Basic stats: COMPLETE Column stats: NONE
+                table:
+                    input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
+                    output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
+                    serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
+                    name: test_dw.acc_ip_cntry_mapp
+
+  Stage: Stage-0
+    Move Operator
+      tables:
+          partition:
+            acc_id
+            acc_start_dt
+          replace: false
+          table:
+              input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
+              output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
+              serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
+              name: test_dw.acc_ip_cntry_mapp
+
+  Stage: Stage-3
+    Stats-Aggr Operator
+
+Time taken: 1.006 seconds, Fetched: 114 row(s)
+hive> INSERT INTO TEST_DW.ACC_IP_CNTRY_MAPP PARTITION (ACC_ID, ACC_START_DT)
+    > SELECT H.IP_ADDR
+    >      , G.CNTRY_CD
+    >      , G.CNTRY_NM
+    >      , H.ACC_ID
+    >      , H.ACC_START_DT
+    >   FROM (
+    >         SELECT IP_ADDR
+    >              , COALESCE(SPLIT(IP_ADDR,'\\.')[0], '_')   AS IP_OCTET1
+    >              , CAST( SPLIT(IP_ADDR,'\\.')[0] AS BIGINT) * 16777216 +
+    >                CAST( SPLIT(IP_ADDR,'\\.')[1] AS BIGINT) * 65536 +
+    >                CAST( SPLIT(IP_ADDR,'\\.')[2] AS BIGINT) * 256 +
+    >                CAST( SPLIT(IP_ADDR,'\\.')[3] AS BIGINT) AS IP_ADDR_NUMT
+    >              , MAX(ACC_ID)         AS ACC_ID
+    >              , MAX(ACC_START_DT)   AS ACC_START_DT
+    >           FROM TEST_ODS.ACC_LOG
+    >          WHERE ACC_ID       = ${ACC_ID}
+    >            AND ACC_START_DT = ${ACC_START_DT}
+    >          GROUP BY IP_ADDR
+    >      ) H
+    >  INNER JOIN
+    >        (
+    >         SELECT IP_OCTET1
+    >              , START_IP_NUMT
+    >              , END_IP_NUMT
+    >              , CNTRY_CD
+    >              , CNTRY_NM
+    >           FROM TEST_DW.CNTRY_IP_RANGE
+    >      ) G
+    >     ON H.IP_OCTET1 = G.IP_OCTET1
+    >  WHERE H.IP_ADDR_NUMT BETWEEN G.START_IP_NUMT AND G.END_IP_NUMT
+    > ;
+WARNING: Hive-on-MR is deprecated in Hive 2 and may not be available in the future versions. Consider using a different execution engine (i.e. tez, spark) or using Hive 1.X releases.
+Query ID = hduser_20200806013614_18c8f359-4eaa-4441-889c-1fd29245d2ca
+Total jobs = 2
+Launching Job 1 out of 2
+Number of reduce tasks not specified. Estimated from input data size: 1
+In order to change the average load for a reducer (in bytes):
+  set hive.exec.reducers.bytes.per.reducer=<number>
+In order to limit the maximum number of reducers:
+  set hive.exec.reducers.max=<number>
+In order to set a constant number of reducers:
+  set mapreduce.job.reduces=<number>
+Starting Job = job_1596645169842_0002, Tracking URL = http://hmng:8088/proxy/application_1596645169842_0002/
+Kill Command = /usr/local/hadoop-2.10.0/bin/hadoop job  -kill job_1596645169842_0002
+Hadoop job information for Stage-1: number of mappers: 1; number of reducers: 1
+2020-08-06 01:36:30,970 Stage-1 map = 0%,  reduce = 0%
+2020-08-06 01:37:14,701 Stage-1 map = 67%,  reduce = 0%, Cumulative CPU 46.28 sec
+2020-08-06 01:37:20,951 Stage-1 map = 89%,  reduce = 0%, Cumulative CPU 52.59 sec
+2020-08-06 01:37:24,101 Stage-1 map = 100%,  reduce = 0%, Cumulative CPU 55.26 sec
+2020-08-06 01:37:42,975 Stage-1 map = 100%,  reduce = 70%, Cumulative CPU 70.67 sec
+2020-08-06 01:37:49,232 Stage-1 map = 100%,  reduce = 78%, Cumulative CPU 76.88 sec
+2020-08-06 01:37:55,480 Stage-1 map = 100%,  reduce = 87%, Cumulative CPU 83.03 sec
+2020-08-06 01:38:01,766 Stage-1 map = 100%,  reduce = 94%, Cumulative CPU 89.39 sec
+2020-08-06 01:38:07,061 Stage-1 map = 100%,  reduce = 100%, Cumulative CPU 94.77 sec
+MapReduce Total cumulative CPU time: 1 minutes 34 seconds 770 msec
+Ended Job = job_1596645169842_0002
+Launching Job 2 out of 2
+Number of reduce tasks not specified. Estimated from input data size: 1
+In order to change the average load for a reducer (in bytes):
+  set hive.exec.reducers.bytes.per.reducer=<number>
+In order to limit the maximum number of reducers:
+  set hive.exec.reducers.max=<number>
+In order to set a constant number of reducers:
+  set mapreduce.job.reduces=<number>
+Starting Job = job_1596645169842_0003, Tracking URL = http://hmng:8088/proxy/application_1596645169842_0003/
+Kill Command = /usr/local/hadoop-2.10.0/bin/hadoop job  -kill job_1596645169842_0003
+Hadoop job information for Stage-2: number of mappers: 2; number of reducers: 1
+2020-08-06 01:38:23,287 Stage-2 map = 0%,  reduce = 0%
+2020-08-06 01:38:46,356 Stage-2 map = 33%,  reduce = 0%, Cumulative CPU 26.89 sec
+2020-08-06 01:38:47,395 Stage-2 map = 50%,  reduce = 0%, Cumulative CPU 28.29 sec
+2020-08-06 01:38:50,543 Stage-2 map = 88%,  reduce = 0%, Cumulative CPU 36.51 sec
+2020-08-06 01:38:54,820 Stage-2 map = 100%,  reduce = 0%, Cumulative CPU 41.28 sec
+2020-08-06 01:39:07,404 Stage-2 map = 100%,  reduce = 67%, Cumulative CPU 55.52 sec
+2020-08-06 01:39:12,606 Stage-2 map = 100%,  reduce = 68%, Cumulative CPU 61.88 sec
+2020-08-06 01:40:12,801 Stage-2 map = 100%,  reduce = 68%, Cumulative CPU 115.85 sec
+2020-08-06 01:41:12,832 Stage-2 map = 100%,  reduce = 68%, Cumulative CPU 175.75 sec
+2020-08-06 01:42:13,067 Stage-2 map = 100%,  reduce = 68%, Cumulative CPU 235.69 sec
+2020-08-06 01:42:25,464 Stage-2 map = 100%,  reduce = 69%, Cumulative CPU 253.86 sec
+2020-08-06 01:42:37,869 Stage-2 map = 100%,  reduce = 70%, Cumulative CPU 265.98 sec
+2020-08-06 01:42:50,365 Stage-2 map = 100%,  reduce = 71%, Cumulative CPU 278.12 sec
+2020-08-06 01:43:07,923 Stage-2 map = 100%,  reduce = 72%, Cumulative CPU 296.32 sec
+2020-08-06 01:43:20,330 Stage-2 map = 100%,  reduce = 81%, Cumulative CPU 309.13 sec
+2020-08-06 01:43:26,512 Stage-2 map = 100%,  reduce = 85%, Cumulative CPU 315.31 sec
+2020-08-06 01:43:50,271 Stage-2 map = 100%,  reduce = 87%, Cumulative CPU 339.62 sec
+2020-08-06 01:44:02,666 Stage-2 map = 100%,  reduce = 88%, Cumulative CPU 351.76 sec
+2020-08-06 01:44:20,268 Stage-2 map = 100%,  reduce = 89%, Cumulative CPU 369.96 sec
+2020-08-06 01:45:21,215 Stage-2 map = 100%,  reduce = 90%, Cumulative CPU 430.48 sec
+2020-08-06 01:45:56,384 Stage-2 map = 100%,  reduce = 92%, Cumulative CPU 466.62 sec
+2020-08-06 01:46:02,569 Stage-2 map = 100%,  reduce = 93%, Cumulative CPU 472.65 sec
+2020-08-06 01:46:57,115 Stage-2 map = 100%,  reduce = 94%, Cumulative CPU 526.96 sec
+2020-08-06 01:47:20,807 Stage-2 map = 100%,  reduce = 95%, Cumulative CPU 551.0 sec
+2020-08-06 01:47:45,597 Stage-2 map = 100%,  reduce = 96%, Cumulative CPU 575.14 sec
+2020-08-06 01:48:21,766 Stage-2 map = 100%,  reduce = 97%, Cumulative CPU 611.36 sec
+2020-08-06 01:48:57,894 Stage-2 map = 100%,  reduce = 98%, Cumulative CPU 647.59 sec
+2020-08-06 01:49:58,828 Stage-2 map = 100%,  reduce = 98%, Cumulative CPU 708.54 sec
+2020-08-06 01:50:22,531 Stage-2 map = 100%,  reduce = 99%, Cumulative CPU 732.46 sec
+2020-08-06 01:51:23,457 Stage-2 map = 100%,  reduce = 99%, Cumulative CPU 792.48 sec
+2020-08-06 01:51:25,576 Stage-2 map = 100%,  reduce = 100%, Cumulative CPU 795.18 sec
+MapReduce Total cumulative CPU time: 13 minutes 15 seconds 180 msec
+Ended Job = job_1596645169842_0003
+Loading data to table test_dw.acc_ip_cntry_mapp partition (acc_id=null, acc_start_dt=null)
+
+Loaded : 1/1 partitions.
+         Time taken to load dynamic partitions: 0.764 seconds
+         Time taken for adding to write entity : 0.002 seconds
+MapReduce Jobs Launched:
+Stage-Stage-1: Map: 1  Reduce: 1   Cumulative CPU: 94.77 sec   HDFS Read: 62875886 HDFS Write: 80081314 SUCCESS
+Stage-Stage-2: Map: 2  Reduce: 1   Cumulative CPU: 795.18 sec   HDFS Read: 83498676 HDFS Write: 4399564 SUCCESS
+Total MapReduce CPU Time Spent: 14 minutes 49 seconds 950 msec
+OK
+Time taken: 913.699 seconds
